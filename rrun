@@ -32,7 +32,7 @@ if not address or not file then
 end
 
 local serpent = require("serpent")
-local rr = require("rr")
+local rr = require("rrlib")
 local socket = require("socket")
 local node = socket.connect(address, 3786)
 
