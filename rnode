@@ -1,8 +1,12 @@
 #!/usr/bin/luajit
 
+-- This line will just make sure that were includeing rrlib.lua
+-- from the right directory
 package.path = debug.getinfo(1,
 "S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
+-- Parse command line arguments
+-- Also sets the port and interface to use
 local args = {...}
 
 local port = 3786
@@ -29,13 +33,16 @@ for i, v in ipairs(args) do
 	end
 end
 
-local rr = require("rr")
-local client
-
+-- Load rrlib.lua and other dependencies
+local rr = require("rrlib")
 local serpent = require("serpent")
 local socket = require("socket")
-local server = assert(socket.bind(interface, port))
 
+-- Start te server
+local server = assert(socket.bind(interface, port))
+local client
+
+-- Needs some more cleanup
 o = {}
 
 local encapsulate = {"print", "io.write", "io.read"}
