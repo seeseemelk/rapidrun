@@ -1,0 +1,20 @@
+#!/usr/bin/luajit
+
+package.path = debug.getinfo(1,
+"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+
+local args = {...}
+local address = args[1]
+
+if #args == 0 or not address or address == "--help" then
+	print("RapidRun kill command, made by Sebastiaan de Schaetzen")
+	print("")
+	print("Usage: rkill [OPTION]... IP")
+	print("  --help\t\t\tShow this help page")
+	return
+end
+
+local socket = require("socket")
+local node = socket.connect(address, 3786)
+node:send("kill\n")
+node:close()

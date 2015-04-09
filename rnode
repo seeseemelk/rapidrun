@@ -1,0 +1,127 @@
+#!/usr/bin/luajit
+
+package.path = debug.getinfo(1,
+"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+
+local args = {...}
+
+local port = 3786
+local interface = "*"
+
+local ignoreNext = false
+for i, v in ipairs(args) do
+	if ignoreNext then
+		ignoreNext = false
+	elseif v == "--help" then
+		print("RapidRun server, made by Sebastiaan de Schaetzen")
+		print("")
+		print("Usage: rnode [OPTION]...")
+		print("  --help\t\t\tShow this help page")
+		print("  --port, -p\t\t\tUsage port")
+		print("  -I\t\t\tUse interface")
+		return
+	elseif v == "--port" or v == "-p" then
+		port = tonumber(args[i + 1])
+		ignoreNext = true
+	elseif v == "-I" then
+		interface = args[i + 1]
+		ignoreNext = true
+	end
+end
+
+local rr = require("rr")
+local client
+
+local serpent = require("serpent")
+local socket = require("socket")
+local server = assert(socket.bind(interface, port))
+
+o = {}
+
+local encapsulate = {"print", "io.write", "io.read"}
+for i, v in ipairs(encapsulate) do
+	o[v] = _G[v]
+	_G[v] = function(...)
+		rr.executeremote(client, v, ...)
+	end
+end
+
+_G["rrequire"] = function(file)
+	local data = rr.loadfile(client, file .. ".lua")
+	return data()
+end
+
+function kill()
+	server:settimeout(0)
+	local nc = server:accept()
+	if nc then
+		local line = nc:receive("*l")
+		nc:close()
+		server:settimeout()
+		if line == "kill" then
+			error("Process killed")
+		end
+	end
+end
+
+local function runnode(client)
+	local fileToLoad = client:receive("*l")
+	local command, file = string.match(fileToLoad, "(.-)=(.+)")
+
+	if command ~= "runfile" then
+		o.print("Unknown command " .. tostring(command))
+		return
+	end
+
+	o.print("Loading file...")
+	file, e = rr.loadfile(client, file)
+	local r
+	if not file then
+		print("Error: " .. tostring(e) .. "\n")
+		r = {"compilation error"}
+	else
+		o.print("Loaded")
+
+		o.print("Executing")
+		r = {pcall(file)}
+
+		if r[1] == true then
+			table.remove(r, 1)
+		else
+			print("Error: " .. tostring(r[2]) .. "\n")
+			r = {"runtime error"}
+		end
+	end
+
+	client:send("return=" .. #r .. "\n")
+	for i, v in ipairs(r) do
+		rr.sendParameter(client, v)
+	end
+
+	o.print("Closing connection")
+	client:close()
+end
+
+local function read(clientO, ...)
+	return clientO.client:read(...)
+end
+
+local function send(clientO, ...)
+	return clientO.client:send(...)
+end
+
+while true do
+	client = server:accept()
+	local status, err = pcall(runnode, client)
+	o.print("Stopped")
+	if not status then
+		if not client then
+			o.print("Unknown error occurred (connection reset?)")
+		else
+			pcall(print, "Error: " .. err)
+		end
+		server:settimeout()
+	end
+end
+
+

@@ -1,0 +1,79 @@
+#!/usr/bin/luajit
+
+package.path = debug.getinfo(1,
+"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+
+function displayHelpPage()
+	print("RapidRun run command, made by Sebastiaan de Schaetzen")
+	print("")
+	print("Usage: rrun [OPTION]... FILE ADDRESS")
+	print("  --help\t\t\tShow this help page")
+	print("  --port, -p\t\t\tUsage port")
+	print("  -I\t\t\tUse interface")
+end
+
+local args = {...}
+local file = args[1]
+local address = args[2]
+
+local ignoreNext = false
+for i, v in ipairs(args) do
+	if ignoreNext then
+		ignoreNext = false
+	elseif v == "--help" then
+		displayHelpPage()
+		return
+	end
+end
+
+if not address or not file then
+	displayHelpPage()
+	return
+end
+
+local serpent = require("serpent")
+local rr = require("rr")
+local socket = require("socket")
+local node = socket.connect(address, 3786)
+
+node:send("runfile=" .. tostring(file) .. "\n")
+
+while true do
+	local l = node:receive("*l")
+	if not l then
+		return
+	end
+	local c, a = string.match(l, "(.-)=(.+)")
+
+	if c == "loadfile" then
+		rr.sendfile(node, a)
+	elseif c == "call" then
+		local n = node:receive("*l")
+		local np = tonumber(string.match(n, ".-=(.+)"))
+
+		local p = {}
+
+		for i = 1, np do
+			local pm = rr.receiveParameter(node)
+			p[#p + 1] = pm
+		end
+		local f = _G[a]
+		
+		local r = {f(unpack(p))}
+
+		node:send("return=" .. #r .. "\n")
+		for i, v in ipairs(r) do
+			rr.sendParameter(node, v)
+		end
+	elseif c == "return" then
+		local p = {}
+
+		for i = 1, tonumber(a) do
+			local pm = rr.receiveParameter(node)
+			p[#p + 1] = pm
+		end
+
+		local s = table.concat(p, ", ")
+		print("Returned with values: " .. tostring(s))
+	end
+end
