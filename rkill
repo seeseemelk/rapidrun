@@ -1,8 +1,11 @@
 #!/usr/bin/luajit
 
+-- This line will just make sure that were includeing rrlib.lua
+-- from the right directory
 package.path = debug.getinfo(1,
 "S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
+-- Command line arguments
 local args = {...}
 local address = args[1]
 
@@ -14,7 +17,10 @@ if #args == 0 or not address or address == "--help" then
 	return
 end
 
+-- Load luasockets
 local socket = require("socket")
+
+-- Send the kill command to the node
 local node = socket.connect(address, 3786)
 node:send("kill\n")
 node:close()
